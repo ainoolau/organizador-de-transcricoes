@@ -34,7 +34,7 @@ def autenticar():
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json',
+                'secrets.json',
                 SCOPES
             )
             creds = flow.run_local_server(port=0)
@@ -57,7 +57,7 @@ except Exception as e:
 # Funções de manipulação
 def criar_pasta(nome, pai_id=None):
     try:
-        query = f"name='{nome}' and mimeType='application/vnd.google-apps.folder'"
+        query = f"name='{nome}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
         if pai_id:
             query += f" and '{pai_id}' in parents"
 
@@ -76,7 +76,6 @@ def criar_pasta(nome, pai_id=None):
 
 def criar_documento_seguro(titulo, conteudo, pasta_id):
     try:
-        # Cria documento vazio sem usar template
         novo_doc = {
             'name': titulo,
             'parents': [pasta_id],
@@ -90,7 +89,6 @@ def criar_documento_seguro(titulo, conteudo, pasta_id):
         
         document_id = document['id']
         
-        # Insere conteúdo diretamente
         requests = [{
             'insertText': {
                 'text': conteudo,
@@ -112,7 +110,7 @@ def detectar_idioma(nome_arquivo):
     prefixos = {
         'ar': 'Árabe', 'de': 'Alemão', 'es': 'Espanhol', 'fr': 'Francês',
         'it': 'Italiano', 'ja': 'Japonês', 'ko': 'Coreano', 'nl': 'Holandês',
-        'pl': 'Polonês', 'pt': 'Português', 'ru': 'Russo', 'tr': 'Turco',
+        'pl': 'Polonês', 'tr': 'Turco', 'pt': 'Português', 'ru': 'Russo',
         'en': 'Inglês', 'hi': 'Hindi', 'id': 'Indonésio', 'fil': 'Filipino'
     }
     nome = nome_arquivo.lower()
@@ -158,8 +156,14 @@ if st.button("🚀 Processar Transcrições", type="primary", use_container_widt
             if not pasta_principal:
                 st.error("Falha ao criar pasta principal.")
                 st.stop()
+            st.write(f"✅ Pasta 'Transcricoes_Athos' encontrada ou criada.")
 
-            st.write(f"✅ Pasta criada: [Abrir no Drive](https://drive.google.com/drive/folders/{pasta_principal})")
+            st.write(f"📁 Criando pasta para o vídeo: '{nome_video}'...")
+            pasta_video = criar_pasta(nome_video, pasta_principal)
+            if not pasta_video:
+                st.error("Falha ao criar pasta do vídeo.")
+                st.stop()
+            st.write(f"✅ Pasta do vídeo criada: [Abrir no Drive](https://drive.google.com/drive/folders/{pasta_video})")
 
             for arquivo in arquivos:
                 try:
@@ -168,12 +172,12 @@ if st.button("🚀 Processar Transcrições", type="primary", use_container_widt
                     idioma = detectar_idioma(arquivo.name)
 
                     st.write(f"📁 Criando pasta '{idioma}'...")
-                    pasta_idioma = criar_pasta(idioma, pasta_principal)
+                    pasta_idioma = criar_pasta(idioma, pasta_video)
                     if not pasta_idioma:
                         continue
 
                     st.write("✍️ Criando transcrição...")
-                    if criar_documento_seguro(f"Transcrição - {arquivo.name}", conteudo, pasta_idioma):
+                    if criar_documento_seguro(f"Transcrição - {idioma}", conteudo, pasta_idioma):
                         st.write("✅ Transcrição criada")
 
                     st.write("🎬 Criando cópia nomeada...")
@@ -191,3 +195,7 @@ if st.button("🚀 Processar Transcrições", type="primary", use_container_widt
         except Exception as e:
             status.update(label="❌ Falha no processamento", state="error")
             st.error(f"Erro geral: {str(e)}")
+
+st.markdown("---")
+if st.button("🔄 Reiniciar o Aplicativo", help="Clique para recarregar o app e processar novos arquivos."):
+    st.rerun()

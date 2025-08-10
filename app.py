@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import pickle
-import google.auth.transport.requests
+from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -13,34 +13,33 @@ st.set_page_config(
     layout="wide"
 )
 
-# Parâmetros de autenticação
+# Parâmetros
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/documents'
 ]
-TEMPLATE_DOC_ID = '1e942AWo1npx4nRDigYtrc4_jVcfTVzJ3eFen-Et7-0c'
 
-# Autenticação via OAuth2
 def autenticar():
     token_file = "token.pkl"
+    creds = None
 
+    # Verifica se já existe token
     if os.path.exists(token_file):
         with open(token_file, "rb") as token:
             creds = pickle.load(token)
-    else:
-        flow = InstalledAppFlow.from_client_config(
-            {
-                "installed": {
-                    "client_id": CLIENT_ID,
-                    "client_secret": CLIENT_SECRET,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token"
-                }
-            },
-            SCOPES
-        )
-        creds = flow.run_local_server(port=0)
 
+    # Se não tem credenciais válidas
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                'credentials.json',
+                SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        
+        # Salva as credenciais para o próximo uso
         with open(token_file, "wb") as token:
             pickle.dump(creds, token)
 
@@ -77,32 +76,36 @@ def criar_pasta(nome, pai_id=None):
 
 def criar_documento_seguro(titulo, conteudo, pasta_id):
     try:
-        doc_copy = drive_service.files().copy(
-            fileId=TEMPLATE_DOC_ID,
-            body={
-                'name': titulo,
-                'parents': [pasta_id]
-            },
-            supportsAllDrives=True,
+        # Cria documento vazio sem usar template
+        novo_doc = {
+            'name': titulo,
+            'parents': [pasta_id],
+            'mimeType': 'application/vnd.google-apps.document'
+        }
+        
+        document = drive_service.files().create(
+            body=novo_doc,
             fields='id'
         ).execute()
-        document_id = doc_copy.get('id')
-
+        
+        document_id = document['id']
+        
+        # Insere conteúdo diretamente
+        requests = [{
+            'insertText': {
+                'text': conteudo,
+                'endOfSegmentLocation': {'segmentId': ''}
+            }
+        }]
+        
         docs_service.documents().batchUpdate(
             documentId=document_id,
-            body={
-                'requests': [{
-                    'insertText': {
-                        'text': conteudo,
-                        'location': {'index': 1}
-                    }
-                }]
-            }
+            body={'requests': requests}
         ).execute()
-
+        
         return True
-    except HttpError as e:
-        st.error(f"Erro ao criar documento '{titulo}': {str(e)}")
+    except Exception as e:
+        st.error(f"Erro ao criar documento: {str(e)}")
         return False
 
 def detectar_idioma(nome_arquivo):

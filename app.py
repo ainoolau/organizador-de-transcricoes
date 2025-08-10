@@ -117,7 +117,7 @@ def detectar_idioma(nome_arquivo):
     return prefixos.get(nome[:3], prefixos.get(nome[:2], 'Outros'))
 
 # Interface
-st.title("📂 Organizador de Transcrições PASTAS ATHOS")
+st.title("📂 Organizador de Transcrições")
 
 with st.container(border=True):
     st.subheader("1. Selecione os arquivos .SRT")
